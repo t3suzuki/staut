@@ -1,3 +1,9 @@
 [submodule "ppopp21-preemption-artifact"]
 	path = ppopp21-preemption-artifact
 	url = git@github.com:t3suzuki/ppopp21-preemption-artifact.git
+[submodule "staut-YCSB-cpp"]
+	path = staut-YCSB-cpp
+	url = git@github.com:t3suzuki/staut-YCSB-cpp.git
+[submodule "rocksdb"]
+	path = rocksdb
+	url = https://github.com/facebook/rocksdb.git
