@@ -1,0 +1,14 @@
+diff --git a/src/support/mtx_rw.c b/src/support/mtx_rw.c
+index 7b2c58438..84b5ce31d 100644
+--- a/src/support/mtx_rw.c
++++ b/src/support/mtx_rw.c
+@@ -194,7 +194,8 @@ __wt_readlock(WT_SESSION_IMPL *session, WT_RWLOCK *l)
+                 goto stall;
+             if (__wt_atomic_casv64(&l->u.v, old.u.v, new.u.v))
+                 return;
+-            WT_PAUSE();
++            //WT_PAUSE();
++	    __wt_yield();
+         }
+ 
+         /*
