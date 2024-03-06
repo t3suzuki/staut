@@ -7,3 +7,6 @@
 [submodule "rocksdb"]
 	path = rocksdb
 	url = https://github.com/facebook/rocksdb.git
+[submodule "wiredtiger"]
+	path = wiredtiger
+	url = https://github.com/wiredtiger/wiredtiger.git
