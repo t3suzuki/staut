@@ -1,0 +1,3 @@
+[submodule "ppopp21-preemption-artifact"]
+	path = ppopp21-preemption-artifact
+	url = git@github.com:t3suzuki/ppopp21-preemption-artifact.git
