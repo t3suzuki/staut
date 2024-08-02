@@ -5,9 +5,27 @@
 #define N_TH (4)
 #define T_SEC (4)
 
+int begin = 0;
+int quit = 0;
+int count[N_TH];
+
+typedef struct {
+  int i_th;
+} arg_t;
+
+arg_t arg[N_TH];
+
 void
-worker()
+worker(void *p)
 {
+  arg_t *arg = (arg_t *)p;
+  while (!begin) {
+    sched_yield();
+  }
+  while (!quit) {
+    count[arg->i_th]++;
+    sched_yield();
+  }
 }
 
 double c(struct timespec ts)
@@ -22,9 +40,11 @@ main()
   struct timespec ts1, ts2;
   pthread_t pth[N_TH];
   for (i_th=0; i_th<N_TH; i_th++) {
-    pthread_create(&pth[i_th], NULL, worker, NULL);
+    arg[i_th].i_th = 0;
+    pthread_create(&pth[i_th], NULL, worker, &arg[i_th]);
   }
 
+  begin = 1;
   clock_gettime(CLOCK_MONOTONIC, &ts1);
   int t;
   for (t=0; t<T_SEC; ) {
@@ -36,8 +56,13 @@ main()
     }
     sched_yield();
   }
+  quit = 1;
   for (i_th=0; i_th<N_TH; i_th++) {
     pthread_join(pth[i_th], NULL);
   }
-
+  int sum = 0;
+  for (i_th=0; i_th<N_TH; i_th++) {
+    sum += count[i_th];
+  }
+  printf("%f Mops\n", sum / 1000.0 / 1000.0);
 }
