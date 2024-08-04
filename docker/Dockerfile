@@ -21,3 +21,5 @@ RUN cp my_configs/.screenrc ./
 
 WORKDIR /home/$USERNAME/
 RUN git clone --recursive https://github.com/t3suzuki/staut
+
+RUN apt install -y autoconf libtool zlib1g-dev liburing-dev binutils-dev libgflags-dev
