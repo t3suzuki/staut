@@ -33,8 +33,12 @@ WORKDIR /home/$USERNAME/staut/rocksdb/build
 RUN cmake .. -DCMAKE_BUILD_TYPE=Release
 RUN make -j 8
 
+USER root
+RUN apt install -y python3-dev swig
+USER $USERNAME
+
 WORKDIR /home/$USERNAME/staut/wiredtiger
-RUN git checkout v11.2.0
+RUN git checkout 11.2.0
 RUN mkdir build
 WORKDIR /home/$USERNAME/staut/wiredtiger/build
 RUN cmake .. -DCMAKE_BUILD_TYPE=Release
