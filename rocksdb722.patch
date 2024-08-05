@@ -1,0 +1,31 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0d400462e..b62973d1c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -336,14 +336,14 @@ endif()
+ set(CMAKE_REQUIRED_FLAGS ${OLD_CMAKE_REQUIRED_FLAGS})
+ 
+ # thread_local is part of C++11 and later (TODO: clean up this define)
+-add_definitions(-DROCKSDB_SUPPORT_THREAD_LOCAL)
++#add_definitions(-DROCKSDB_SUPPORT_THREAD_LOCAL)
+ 
+-option(WITH_IOSTATS_CONTEXT "Enable IO stats context" ON)
++option(WITH_IOSTATS_CONTEXT "Enable IO stats context" OFF)
+ if (NOT WITH_IOSTATS_CONTEXT)
+   add_definitions(-DNIOSTATS_CONTEXT)
+ endif()
+ 
+-option(WITH_PERF_CONTEXT "Enable perf context" ON)
++option(WITH_PERF_CONTEXT "Enable perf context" OFF)
+ if (NOT WITH_PERF_CONTEXT)
+   add_definitions(-DNPERF_CONTEXT)
+ endif()
+@@ -518,7 +518,7 @@ if(NOT WIN32)
+   add_definitions(-DROCKSDB_PLATFORM_POSIX -DROCKSDB_LIB_IO_POSIX)
+ endif()
+ 
+-option(WITH_FALLOCATE "build with fallocate" ON)
++option(WITH_FALLOCATE "build with fallocate" OFF)
+ if(WITH_FALLOCATE)
+   CHECK_CXX_SOURCE_COMPILES("
+ #include <fcntl.h>
