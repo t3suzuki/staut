@@ -1,7 +1,7 @@
 
 N_CORE ?= 1
 ND ?= 1
-USE_PREEMPT ?= 1
+USE_PREEMPT ?= 0
 USE_IO_URING ?= 0
 WRITE_DEG ?= 8
 READ_DEG ?= 256
@@ -16,7 +16,7 @@ FLAGS += -DWRITE_DEG=$(WRITE_DEG)
 FLAGS += -DREAD_DEG=$(READ_DEG)
 
 #ABT_PATH ?= $(HOME)/argobots/install
-ABT_PATH ?= /home/tomoya-s/work/github/ppopp21-preemption-artifact/argobots/install
+ABT_PATH ?= /home/tomoya-s/staut/argobots/install
 
 all:
 	g++ $(FLAGS) -c nvme.cc  -fno-exceptions -I $(ABT_PATH)/include

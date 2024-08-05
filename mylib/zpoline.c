@@ -32,6 +32,8 @@
 #include <sched.h>
 #include <dlfcn.h>
 
+#define NEW_DIS_ASM (1)
+
 #define SUPPLEMENTAL__REWRITTEN_ADDR_CHECK 1
 
 #ifdef SUPPLEMENTAL__REWRITTEN_ADDR_CHECK

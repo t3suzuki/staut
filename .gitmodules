@@ -1,6 +1,3 @@
-[submodule "ppopp21-preemption-artifact"]
-	path = ppopp21-preemption-artifact
-	url = https://github.com/t3suzuki/ppopp21-preemption-artifact.git
 [submodule "staut-YCSB-cpp"]
 	path = staut-YCSB-cpp
 	url = https://github.com/t3suzuki/staut-YCSB-cpp.git
