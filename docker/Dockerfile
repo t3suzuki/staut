@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -22,4 +22,22 @@ RUN cp my_configs/.screenrc ./
 WORKDIR /home/$USERNAME/
 RUN git clone --recursive https://github.com/t3suzuki/staut
 
+USER root
 RUN apt install -y autoconf libtool zlib1g-dev liburing-dev binutils-dev libgflags-dev
+USER $USERNAME
+
+WORKDIR /home/$USERNAME/staut/rocksdb
+RUN git checkout v7.2.2
+RUN mkdir build
+WORKDIR /home/$USERNAME/staut/rocksdb/build
+RUN cmake .. -DCMAKE_BUILD_TYPE=Release
+RUN make -j 8
+
+WORKDIR /home/$USERNAME/staut/wiredtiger
+RUN git checkout v11.2.0
+RUN mkdir build
+WORKDIR /home/$USERNAME/staut/wiredtiger/build
+RUN cmake .. -DCMAKE_BUILD_TYPE=Release
+RUN make -j 8
+
+
