@@ -20,6 +20,7 @@
 #include <liburing.h>
 #include <sys/syscall.h>
 
+#include "iouringlib.h"
 #include "real_pthread.h"
 #include "nvme.h"
 #include "myfs.h"
@@ -27,7 +28,7 @@
 #include "ult.h"
 
 #define N_HELPER (0)
-#define USE_IO_URING_SQPOLL (0)
+#define USE_IO_URING_IOPOLL (0)
 
 typedef long (*syscall_fn_t)(long, long, long, long, long, long, long);
 static syscall_fn_t next_sys_call = NULL;
@@ -264,158 +265,39 @@ write_impl(int hookfd, loff_t len, loff_t pos, char *buf)
   myfs_decrement_ref(hookfd);
 }
 
-#define IO_URING_QD (N_ULT_PER_CORE*8)
-#define IO_URING_TH1 (8)
-#define IO_URING_TH2 (1)
-
-static struct io_uring ring[N_CORE][128];
-static int done_flag[N_CORE][IO_URING_QD];
-static int pending_req[N_CORE][128];
-static int submit_cnt[N_CORE][128];
-
-static inline
-void __io_uring_check(int core_id)
-{
-  struct io_uring_cqe *cqe;
-  unsigned head;
-  int i = 0;
-  io_uring_for_each_cqe(&ring[core_id][0], head, cqe) {
-    if (cqe->res > 0) {
-      done_flag[core_id][cqe->user_data] = 1;
-      i++;
-    }
-  }
-  if (i > 0)
-    io_uring_cq_advance(&ring[core_id][0], i);
-}
-
-
-
-static inline void iouring_enter(int core_id, int submit)
-{
-#if 1
-  io_uring_submit(&ring[core_id][0]);
-#else
-  *ring[core_id][0].sq.ktail = ring[core_id][0].sq.sqe_tail;
-  syscall(__NR_io_uring_enter, ring[core_id][0].ring_fd, submit, 0, 0, NULL, 0);
-#endif
-}
-
+static struct submitter sub[N_CORE];
 
 static inline
 void __io_uring_bottom(int core_id, int sqe_id)
 {
-#if 0
-  //io_uring_submit(&ring[core_id][0]);
-  iouring_enter(core_id, 1);
-#else
-  int sub_cnt = -1;
-  if (pending_req[core_id][0] >= IO_URING_TH1) {
-    //printf("io_uring_submit %d\n", core_id);
-    //io_uring_submit(&ring[core_id][0]);
-    iouring_enter(core_id, pending_req[core_id][0]);
-    pending_req[core_id][0] = 0;
-    submit_cnt[core_id][0] = (submit_cnt[core_id][0] + 1) % 65536;
-  } else {
-    pending_req[core_id][0]++;
-    sub_cnt = submit_cnt[core_id][0];
-    int i = 0;
-    while (1) {
-      if (sub_cnt != submit_cnt[core_id][0]) {
-	break;
-      }
-      if (i > IO_URING_TH2) {
-	//printf("io_uring_submit2 %d pend %d submitted %d\n", core_id, pending_req[core_id][0], submit_cnt[core_id][0]);
-	//io_uring_submit(&ring[core_id][0]);
-	iouring_enter(core_id, pending_req[core_id][0]);
-	pending_req[core_id][0] = 0;
-	submit_cnt[core_id][0] = (submit_cnt[core_id][0] + 1) % 65536;
-	break;
-      }
-      ult_yield();
-      i++;
-    }
-  }
-#endif
+  iouring_submit(&sub[core_id], 1);
   while (1) {
-    __io_uring_check(core_id);
-    if (done_flag[core_id][sqe_id])
+    iouring_getevents(&sub[core_id]);
+    iouring_check(&sub[core_id]);
+    if (sub[core_id].done_flag[sqe_id])
       break;
     ult_yield();
-
-#if 0
-    __io_uring_check(core_id);
-    if (done_flag[core_id][sqe_id])
-      break;
-    iouring_enter(core_id, 1);
-#endif
   }
 }
 
 static inline
 void __io_uring_read(int fd, char *buf, size_t count, loff_t pos)
 {
-#if 1
   int core_id = ult_core_id();
   //printf("Read core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-  struct io_uring_sqe *sqe = io_uring_get_sqe(&ring[core_id][0]);
-  io_uring_prep_read(sqe, fd, buf, count, pos);
-  int sqe_id = ((uint64_t)sqe - (uint64_t)ring[core_id][0].sq.sqes) / sizeof(struct io_uring_sqe);
-  sqe->user_data = sqe_id;
-  done_flag[core_id][sqe_id] = 0;
+  int sqe_id = iouring_read(&sub[core_id], fd, buf, count, pos);
   __io_uring_bottom(core_id, sqe_id);
   //printf("Read Done core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-#else
-  int core_id = ult_core_id();
-  size_t unit = 4096*256;
-  size_t off;
-  for (off=0; off<count; off+=unit) {
-    //printf("Read core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-    size_t sz = (count - off) > unit ? unit : count - off;
-    //printf("Read2 core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-    struct io_uring_sqe *sqe = io_uring_get_sqe(&ring[core_id][0]);
-    //printf("Read3 core=%d fd=%d count=%lu pos=%lu %p\n", core_id, fd, count, pos, sqe);
-    io_uring_prep_read(sqe, fd, buf+off, sz, pos+off);
-    int sqe_id = ((uint64_t)sqe - (uint64_t)ring[core_id][0].sq.sqes) / sizeof(struct io_uring_sqe);
-    //printf("Read4 core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-    sqe->user_data = sqe_id;
-    done_flag[core_id][sqe_id] = 0;
-    //printf("Read5 core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-    __io_uring_bottom(core_id, sqe_id);
-    //printf("Read Done. core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-  }
-#endif
 }
 
 static inline
 void __io_uring_write(int fd, char *buf, size_t count, loff_t pos)
 {
-#if 1
   int core_id = ult_core_id();
   //printf("Write core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-  struct io_uring_sqe *sqe = io_uring_get_sqe(&ring[core_id][0]);
-  io_uring_prep_write(sqe, fd, buf, count, pos);
-  int sqe_id = ((uint64_t)sqe - (uint64_t)ring[core_id][0].sq.sqes) / sizeof(struct io_uring_sqe);
-  sqe->user_data = sqe_id;
-  done_flag[core_id][sqe_id] = 0;
+  int sqe_id = iouring_write(&sub[core_id], fd, buf, count, pos);
   __io_uring_bottom(core_id, sqe_id);
   //printf("Write Done core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-#else
-  int core_id = ult_core_id();
-  size_t unit = 32768;
-  size_t off;
-  for (off=0; off<count; off+=unit) {
-    //printf("Write core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-    size_t sz = (count - off) > unit ? unit : count - off;
-    struct io_uring_sqe *sqe = io_uring_get_sqe(&ring[core_id][0]);
-    io_uring_prep_write(sqe, fd, buf+off, sz, pos+off);
-    int sqe_id = ((uint64_t)sqe - (uint64_t)ring[core_id][0].sq.sqes) / sizeof(struct io_uring_sqe);
-    sqe->user_data = sqe_id;
-    done_flag[core_id][sqe_id] = 0;
-    __io_uring_bottom(core_id, sqe_id);
-  }
-  //printf("Write Done core=%d fd=%d count=%lu pos=%lu\n", core_id, fd, count, pos);
-#endif
 }
 
 static inline int
@@ -885,11 +767,10 @@ int __hook_init(long placeholder __attribute__((unused)),
 #if USE_IO_URING
   for (i=0; i<N_CORE; i++) {
     //printf("%s %d %p %d\n", __func__, __LINE__, ring, i);
-#if USE_IO_URING_SQPOLL
-    io_uring_queue_init(IO_URING_QD, &ring[i], IORING_SETUP_SQPOLL);
+#if USE_IO_URING_IOPOLL
+    iouring_setup(&sub[i], 1);
 #else
-    io_uring_queue_init(IO_URING_QD, &ring[i][0], 0);
-    //io_uring_queue_init(IO_URING_QD, &ring[i][0], IORING_SETUP_IOPOLL);
+    iouring_setup(&sub[i], 0);
 #endif
     //printf("%s %d\n", __func__, __LINE__);
   }
