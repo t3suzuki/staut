@@ -21,7 +21,7 @@ ABT_PATH ?= /home/tomoya-s/staut/argobots/install
 all:
 	g++ $(FLAGS) -c nvme.cc  -fno-exceptions -I $(ABT_PATH)/include
 	g++ $(FLAGS) -c mylib.c  -fno-exceptions -I $(ABT_PATH)/include -fpermissive
-	gcc $(FLAGS) -shared -o mylib.so mylib.o hook.c zpoline.c load_debug.c nvme.o myfs.c iouringlib.c -I $(ABT_PATH)/include -L $(ABT_PATH)/lib -labt -lopcodes -lstdc++ -luring
+	gcc $(FLAGS) -shared -o mylib.so mylib.o hook.c zpoline.c load_debug.c nvme.o myfs.c iouringlib.c -I $(ABT_PATH)/include -L $(ABT_PATH)/lib -labt -lopcodes -lstdc++
 	gcc $(FLAGS) -shared -o debug.so debug.c
 
 pth:
