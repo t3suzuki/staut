@@ -32,7 +32,7 @@
 #include <sched.h>
 #include <dlfcn.h>
 
-#define NEW_DIS_ASM (1)
+//#define NEW_DIS_ASM (1)
 
 #define SUPPLEMENTAL__REWRITTEN_ADDR_CHECK 1
 
