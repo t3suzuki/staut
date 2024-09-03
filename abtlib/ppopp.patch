@@ -1,0 +1,579 @@
+diff --git a/argobots/src/arch/abtd_affinity.c b/argobots/src/arch/abtd_affinity.c
+index 3fd3e1c..39be680 100644
+--- a/argobots/src/arch/abtd_affinity.c
++++ b/argobots/src/arch/abtd_affinity.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "abti.h"
++#include "real_pthread.h"
+ #include <unistd.h>
+ 
+ #ifdef HAVE_PTHREAD_SETAFFINITY_NP
+@@ -126,7 +127,7 @@ void ABTD_affinity_init(void)
+ void ABTD_affinity_finalize(void)
+ {
+ #ifdef HAVE_PTHREAD_SETAFFINITY_NP
+-    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &g_initial_cpuset);
++    real_pthread_setaffinity_np(real_pthread_self(), sizeof(cpu_set_t), &g_initial_cpuset);
+ #endif
+ }
+ 
+@@ -136,7 +137,7 @@ int ABTD_affinity_set(ABTD_xstream_context ctx, int rank)
+     int abt_errno;
+ 
+     cpu_set_t cpuset = ABTD_affinity_get_cpuset_for_rank(rank);
+-    if (!pthread_setaffinity_np(ctx, sizeof(cpu_set_t), &cpuset)) {
++    if (!real_pthread_setaffinity_np(ctx, sizeof(cpu_set_t), &cpuset)) {
+         abt_errno = ABT_SUCCESS;
+     } else {
+         abt_errno = ABT_ERR_OTHER;
+@@ -145,7 +146,7 @@ int ABTD_affinity_set(ABTD_xstream_context ctx, int rank)
+ 
+ #if 0
+     /* For debugging and verification */
+-    int ret = pthread_getaffinity_np(ctx, sizeof(cpu_set_t), &cpuset);
++    int ret = real_pthread_getaffinity_np(ctx, sizeof(cpu_set_t), &cpuset);
+     ABTI_CHECK_TRUE(!ret, ABT_ERR_OTHER);
+     int i;
+     for (i = 0; i < CPU_SETSIZE; i++) {
+@@ -180,7 +181,7 @@ int ABTD_affinity_set_cpuset(ABTD_xstream_context ctx, int cpuset_size,
+         CPU_SET(p_cpuset[i], &cpuset);
+     }
+ 
+-    i = pthread_setaffinity_np(ctx, sizeof(cpu_set_t), &cpuset);
++    i = real_pthread_setaffinity_np(ctx, sizeof(cpu_set_t), &cpuset);
+     ABTI_CHECK_TRUE(!i, ABT_ERR_OTHER);
+ 
+   fn_exit:
+@@ -203,7 +204,7 @@ int ABTD_affinity_get_cpuset(ABTD_xstream_context ctx, int cpuset_size,
+     cpu_set_t cpuset;
+     int num_cpus = 0;
+ 
+-    i = pthread_getaffinity_np(ctx, sizeof(cpu_set_t), &cpuset);
++    i = real_pthread_getaffinity_np(ctx, sizeof(cpu_set_t), &cpuset);
+     ABTI_CHECK_TRUE(!i, ABT_ERR_OTHER);
+ 
+     if (p_cpuset != NULL) {
+diff --git a/argobots/src/arch/abtd_signal.c b/argobots/src/arch/abtd_signal.c
+index ebadfd9..cc67e09 100644
+--- a/argobots/src/arch/abtd_signal.c
++++ b/argobots/src/arch/abtd_signal.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "abti.h"
++#include "real_pthread.h"
+ #include <signal.h>
+ #include <unistd.h>
+ #include <sys/syscall.h>
+@@ -278,8 +279,8 @@ int ABTD_signal_timer_delete(ABTD_signal_timer timer)
+ int ABTD_signal_timer_kill(ABTD_xstream_context ctx)
+ {
+     int abt_errno = ABT_SUCCESS;
+-    if (pthread_kill(ctx, ABTD_SIGNAL_TIMER) != 0) {
+-        HANDLE_ERROR("pthread_kill");
++    if (real_pthread_kill(ctx, ABTD_SIGNAL_TIMER) != 0) {
++        HANDLE_ERROR("real_pthread_kill");
+         abt_errno = ABT_ERR_OTHER;
+     }
+     return abt_errno;
+@@ -289,8 +290,8 @@ static inline
+ int ABTDI_signal_mask(int how, sigset_t *p_mask, sigset_t *p_old_mask)
+ {
+     int abt_errno = ABT_SUCCESS;
+-    if (pthread_sigmask(how, p_mask, p_old_mask) != 0) {
+-        HANDLE_ERROR("pthread_sigmask");
++    if (real_pthread_sigmask(how, p_mask, p_old_mask) != 0) {
++        HANDLE_ERROR("real_pthread_sigmask");
+         abt_errno = ABT_ERR_OTHER;
+     }
+     return abt_errno;
+@@ -323,8 +324,8 @@ int ABTD_signal_change_num_es_block(void)
+ int ABTD_signal_wakeup(ABTD_xstream_context ctx)
+ {
+     int abt_errno = ABT_SUCCESS;
+-    if (pthread_kill(ctx, ABTD_SIGNAL_WAKEUP) != 0) {
+-        HANDLE_ERROR("pthread_kill");
++    if (real_pthread_kill(ctx, ABTD_SIGNAL_WAKEUP) != 0) {
++        HANDLE_ERROR("real_pthread_kill");
+         abt_errno = ABT_ERR_OTHER;
+     }
+     return abt_errno;
+diff --git a/argobots/src/arch/abtd_stream.c b/argobots/src/arch/abtd_stream.c
+index 9cf40de..902cdc3 100644
+--- a/argobots/src/arch/abtd_stream.c
++++ b/argobots/src/arch/abtd_stream.c
+@@ -4,14 +4,15 @@
+  */
+ 
+ #include "abti.h"
++#include "real_pthread.h"
+ 
+ int ABTD_xstream_context_create(void *(*f_xstream)(void *), void *p_arg,
+                                 ABTD_xstream_context *p_ctx)
+ {
+     int abt_errno = ABT_SUCCESS;
+-    int ret = pthread_create(p_ctx, NULL, f_xstream, p_arg);
++    int ret = real_pthread_create(p_ctx, NULL, f_xstream, p_arg);
+     if (ret != 0) {
+-        HANDLE_ERROR("pthread_create");
++        HANDLE_ERROR("real_pthread_create");
+         abt_errno = ABT_ERR_XSTREAM;
+     }
+     return abt_errno;
+@@ -28,9 +29,9 @@ int ABTD_xstream_context_free(ABTD_xstream_context *p_ctx)
+ int ABTD_xstream_context_join(ABTD_xstream_context ctx)
+ {
+     int abt_errno = ABT_SUCCESS;
+-    int ret = pthread_join(ctx, NULL);
++    int ret = real_pthread_join(ctx, NULL);
+     if (ret != 0) {
+-        HANDLE_ERROR("pthread_join");
++        HANDLE_ERROR("real_pthread_join");
+         abt_errno = ABT_ERR_XSTREAM;
+     }
+     return abt_errno;
+@@ -38,13 +39,13 @@ int ABTD_xstream_context_join(ABTD_xstream_context ctx)
+ 
+ int ABTD_xstream_context_exit(void)
+ {
+-    pthread_exit(NULL);
++    real_pthread_exit(NULL);
+     return ABT_SUCCESS;
+ }
+ 
+ int ABTD_xstream_context_self(ABTD_xstream_context *p_ctx)
+ {
+     int abt_errno = ABT_SUCCESS;
+-    *p_ctx = pthread_self();
++    *p_ctx = real_pthread_self();
+     return abt_errno;
+ }
+diff --git a/argobots/src/cond.c b/argobots/src/cond.c
+index 29d523d..46aa110 100644
+--- a/argobots/src/cond.c
++++ b/argobots/src/cond.c
+@@ -40,6 +40,23 @@ int ABT_cond_create(ABT_cond *newcond)
+     return abt_errno;
+ }
+ 
++int ABT_cond_create2(ABT_cond *newcond, int clkid)
++{
++    ABTI_ENTER;
++    int abt_errno = ABT_SUCCESS;
++    ABTI_cond *p_newcond;
++
++    p_newcond = (ABTI_cond *)ABTU_malloc(sizeof(ABTI_cond));
++    ABTI_cond_init(p_newcond);
++    p_newcond->clkid = clkid;
++    
++    /* Return value */
++    *newcond = ABTI_cond_get_handle(p_newcond);
++
++    ABTI_LEAVE;
++    return abt_errno;
++}
++
+ /**
+  * @ingroup COND
+  * @brief   Free the condition variable.
+@@ -126,11 +143,11 @@ double convert_timespec_to_sec(const struct timespec *p_ts)
+ }
+ 
+ static inline
+-double get_cur_time(void)
++double get_cur_time(int clkid)
+ {
+ #if defined(HAVE_CLOCK_GETTIME)
+     struct timespec ts;
+-    clock_gettime(CLOCK_REALTIME, &ts);
++    clock_gettime(clkid, &ts);
+     return convert_timespec_to_sec(&ts);
+ #elif defined(HAVE_GETTIMEOFDAY)
+     struct timeval tv;
+@@ -251,7 +268,7 @@ int ABT_cond_timedwait(ABT_cond cond, ABT_mutex mutex,
+     ABTI_mutex_unlock(p_mutex);
+ 
+     while (!ABTD_atomic_load_int32(&ext_signal)) {
+-        double cur_time = get_cur_time();
++        double cur_time = get_cur_time(p_cond->clkid);
+         if (cur_time >= tar_time) {
+             remove_unit(p_cond, p_unit);
+             abt_errno = ABT_ERR_COND_TIMEDOUT;
+@@ -273,6 +290,80 @@ int ABT_cond_timedwait(ABT_cond cond, ABT_mutex mutex,
+     goto fn_exit;
+ }
+ 
++int ABT_cond_clockwait(ABT_cond cond, ABT_mutex mutex,
++                       int clkid, const struct timespec *abstime)
++{
++    ABTI_ENTER;
++    int abt_errno = ABT_SUCCESS;
++    ABTI_cond *p_cond = ABTI_cond_get_ptr(cond);
++    ABTI_CHECK_NULL_COND_PTR(p_cond);
++    ABTI_mutex *p_mutex = ABTI_mutex_get_ptr(mutex);
++    ABTI_CHECK_NULL_MUTEX_PTR(p_mutex);
++
++    double tar_time = convert_timespec_to_sec(abstime);
++
++    ABTI_unit *p_unit;
++    int32_t ext_signal = 0;
++
++    p_unit = (ABTI_unit *)ABTU_calloc(1, sizeof(ABTI_unit));
++    p_unit->pool = (ABT_pool)&ext_signal;
++    p_unit->type = ABT_UNIT_TYPE_EXT;
++
++    ABTI_spinlock_acquire(&p_cond->lock);
++
++    if (p_cond->p_waiter_mutex == NULL) {
++        p_cond->p_waiter_mutex = p_mutex;
++    } else {
++        ABT_bool result = ABTI_mutex_equal(p_cond->p_waiter_mutex, p_mutex);
++        if (result == ABT_FALSE) {
++            ABTI_spinlock_release(&p_cond->lock);
++            abt_errno = ABT_ERR_INV_MUTEX;
++            goto fn_fail;
++        }
++    }
++
++    if (p_cond->num_waiters == 0) {
++        p_unit->p_prev = p_unit;
++        p_unit->p_next = p_unit;
++        p_cond->p_head = p_unit;
++        p_cond->p_tail = p_unit;
++    } else {
++        p_cond->p_tail->p_next = p_unit;
++        p_cond->p_head->p_prev = p_unit;
++        p_unit->p_prev = p_cond->p_tail;
++        p_unit->p_next = p_cond->p_head;
++        p_cond->p_tail = p_unit;
++    }
++
++    p_cond->num_waiters++;
++
++    ABTI_spinlock_release(&p_cond->lock);
++
++    /* Unlock the mutex that the calling ULT is holding */
++    ABTI_mutex_unlock(p_mutex);
++
++    while (!ABTD_atomic_load_int32(&ext_signal)) {
++        double cur_time = get_cur_time(clkid);
++        if (cur_time >= tar_time) {
++            remove_unit(p_cond, p_unit);
++            abt_errno = ABT_ERR_COND_TIMEDOUT;
++            break;
++        }
++        ABT_thread_yield();
++    }
++    ABTU_free(p_unit);
++
++    /* Lock the mutex again */
++    ABTI_mutex_lock(p_mutex);
++
++  fn_exit:
++    ABTI_LEAVE;
++    return abt_errno;
++
++  fn_fail:
++    HANDLE_ERROR_FUNC_WITH_CODE(abt_errno);
++    goto fn_exit;
++}
+ 
+ /**
+  * @ingroup COND
+diff --git a/argobots/src/include/abt.h.in b/argobots/src/include/abt.h.in
+index db614cb..2175f16 100644
+--- a/argobots/src/include/abt.h.in
++++ b/argobots/src/include/abt.h.in
+@@ -570,10 +570,13 @@ int ABT_mutex_attr_set_recursive(ABT_mutex_attr attr, ABT_bool recursive) ABT_AP
+ 
+ /* Condition variable */
+ int ABT_cond_create(ABT_cond *newcond) ABT_API_PUBLIC;
++int ABT_cond_create2(ABT_cond *newcond, int clkid) ABT_API_PUBLIC;
+ int ABT_cond_free(ABT_cond *cond) ABT_API_PUBLIC;
+ int ABT_cond_wait(ABT_cond cond, ABT_mutex mutex) ABT_API_PUBLIC;
+ int ABT_cond_timedwait(ABT_cond cond, ABT_mutex mutex,
+                        const struct timespec *abstime) ABT_API_PUBLIC;
++int ABT_cond_clockwait(ABT_cond cond, ABT_mutex mutex, int clkid,
++                       const struct timespec *abstime) ABT_API_PUBLIC;
+ int ABT_cond_signal(ABT_cond cond) ABT_API_PUBLIC;
+ int ABT_cond_broadcast(ABT_cond cond) ABT_API_PUBLIC;
+ 
+diff --git a/argobots/src/include/abti.h b/argobots/src/include/abti.h
+index a1d3d02..0a61e61 100644
+--- a/argobots/src/include/abti.h
++++ b/argobots/src/include/abti.h
+@@ -524,6 +524,7 @@ struct ABTI_ktable {
+ 
+ struct ABTI_cond {
+     ABTI_spinlock lock;
++    int clkid;
+     ABTI_mutex *p_waiter_mutex;
+     size_t num_waiters;
+     ABTI_unit *p_head;          /* Head of waiters */
+diff --git a/argobots/src/pool/fifo_wait.c b/argobots/src/pool/fifo_wait.c
+index 8daeeda..0bf41b1 100644
+--- a/argobots/src/pool/fifo_wait.c
++++ b/argobots/src/pool/fifo_wait.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "abti.h"
++#include "real_pthread.h"
+ 
+ /* FIFO_WAIT pool implementation */
+ 
+@@ -72,8 +73,8 @@ int pool_init(ABT_pool pool, ABT_pool_config config)
+ 
+     data_t *p_data = (data_t *)ABTU_malloc(sizeof(data_t));
+ 
+-    pthread_mutex_init(&p_data->mutex, NULL);
+-    pthread_cond_init(&p_data->cond, NULL);
++    real_pthread_mutex_init(&p_data->mutex, NULL);
++    real_pthread_cond_init(&p_data->cond, NULL);
+ 
+     p_data->num_units = 0;
+     p_data->p_head = NULL;
+@@ -91,8 +92,8 @@ static int pool_free(ABT_pool pool)
+     void *data = ABTI_pool_get_data(p_pool);
+     data_t *p_data = pool_get_data_ptr(data);
+ 
+-    pthread_mutex_destroy(&p_data->mutex);
+-    pthread_cond_destroy(&p_data->cond);
++    real_pthread_mutex_destroy(&p_data->mutex);
++    real_pthread_cond_destroy(&p_data->cond);
+     ABTU_free(p_data);
+ 
+     return abt_errno;
+@@ -113,7 +114,7 @@ static void pool_push(ABT_pool pool, ABT_unit unit)
+     data_t *p_data = pool_get_data_ptr(data);
+     unit_t *p_unit = (unit_t *)unit;
+ 
+-    pthread_mutex_lock(&p_data->mutex);
++    real_pthread_mutex_lock(&p_data->mutex);
+     if (p_data->num_units == 0) {
+         p_unit->p_prev = p_unit;
+         p_unit->p_next = p_unit;
+@@ -131,8 +132,8 @@ static void pool_push(ABT_pool pool, ABT_unit unit)
+     p_data->num_units++;
+ 
+     p_unit->pool = pool;
+-    pthread_cond_signal(&p_data->cond);
+-    pthread_mutex_unlock(&p_data->mutex);
++    real_pthread_cond_signal(&p_data->cond);
++    real_pthread_mutex_unlock(&p_data->mutex);
+ }
+ 
+ static inline void convert_double_sec_to_timespec(struct timespec *ts_out,
+@@ -150,13 +151,13 @@ static ABT_unit pool_pop_timedwait(ABT_pool pool, double abstime_secs)
+     unit_t *p_unit = NULL;
+     ABT_unit h_unit = ABT_UNIT_NULL;
+ 
+-    pthread_mutex_lock(&p_data->mutex);
++    real_pthread_mutex_lock(&p_data->mutex);
+ 
+     if(!p_data->num_units)
+     {
+         struct timespec ts;
+         convert_double_sec_to_timespec(&ts, abstime_secs);
+-        pthread_cond_timedwait(&p_data->cond, &p_data->mutex, &ts);
++        real_pthread_cond_timedwait(&p_data->cond, &p_data->mutex, &ts);
+     }
+ 
+     if (p_data->num_units > 0) {
+@@ -177,7 +178,7 @@ static ABT_unit pool_pop_timedwait(ABT_pool pool, double abstime_secs)
+ 
+         h_unit = (ABT_unit)p_unit;
+     }
+-    pthread_mutex_unlock(&p_data->mutex);
++    real_pthread_mutex_unlock(&p_data->mutex);
+ 
+     return h_unit;
+ }
+@@ -190,7 +191,7 @@ static ABT_unit pool_pop(ABT_pool pool)
+     unit_t *p_unit = NULL;
+     ABT_unit h_unit = ABT_UNIT_NULL;
+ 
+-    pthread_mutex_lock(&p_data->mutex);
++    real_pthread_mutex_lock(&p_data->mutex);
+     if (p_data->num_units > 0) {
+         p_unit = p_data->p_head;
+         if (p_data->num_units == 1) {
+@@ -209,7 +210,7 @@ static ABT_unit pool_pop(ABT_pool pool)
+ 
+         h_unit = (ABT_unit)p_unit;
+     }
+-    pthread_mutex_unlock(&p_data->mutex);
++    real_pthread_mutex_unlock(&p_data->mutex);
+ 
+     return h_unit;
+ }
+@@ -225,7 +226,7 @@ static int pool_remove(ABT_pool pool, ABT_unit unit)
+     ABTI_CHECK_TRUE_RET(p_unit->pool != ABT_POOL_NULL, ABT_ERR_POOL);
+     ABTI_CHECK_TRUE_MSG_RET(p_unit->pool == pool, ABT_ERR_POOL, "Not my pool");
+ 
+-    pthread_mutex_lock(&p_data->mutex);
++    real_pthread_mutex_lock(&p_data->mutex);
+     if (p_data->num_units == 1) {
+         p_data->p_head = NULL;
+         p_data->p_tail = NULL;
+@@ -241,7 +242,7 @@ static int pool_remove(ABT_pool pool, ABT_unit unit)
+     p_data->num_units--;
+ 
+     p_unit->pool = ABT_POOL_NULL;
+-    pthread_mutex_unlock(&p_data->mutex);
++    real_pthread_mutex_unlock(&p_data->mutex);
+ 
+     p_unit->p_prev = NULL;
+     p_unit->p_next = NULL;
+@@ -257,7 +258,7 @@ static int pool_print_all(ABT_pool pool, void *arg,
+     data_t *p_data = pool_get_data_ptr(data);
+ 
+     ABT_pool_get_access(pool, &access);
+-    pthread_mutex_lock(&p_data->mutex);
++    real_pthread_mutex_lock(&p_data->mutex);
+ 
+     size_t num_units = p_data->num_units;
+     unit_t *p_unit = p_data->p_head;
+@@ -268,7 +269,7 @@ static int pool_print_all(ABT_pool pool, void *arg,
+         p_unit = p_unit->p_next;
+     }
+ 
+-    pthread_mutex_unlock(&p_data->mutex);
++    real_pthread_mutex_unlock(&p_data->mutex);
+ 
+     return ABT_SUCCESS;
+ }
+diff --git a/argobots/src/preemption_timer.c b/argobots/src/preemption_timer.c
+index ba9f73c..80478dc 100644
+--- a/argobots/src/preemption_timer.c
++++ b/argobots/src/preemption_timer.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "abti.h"
++#include "real_pthread.h"
+ 
+ /* used for dedicated timer threads */
+ ABTD_XSTREAM_LOCAL ABTI_preemption_group *lp_ABTI_preemption_group = NULL;
+@@ -412,7 +413,7 @@ int ABT_preemption_timer_start(ABT_preemption_group group)
+             ABTI_CHECK_ERROR(abt_errno);
+         } else {
+             while (!ABTD_atomic_load_int32(&p_ptimer->sleep_flag)) {
+-                sched_yield();
++                real_sched_yield();
+             }
+             ABTD_atomic_store_uint32(&p_ptimer->start_flag, 1);
+             abt_errno = ABTD_futex_wakeup(&p_ptimer->sleep_flag);
+@@ -448,7 +449,7 @@ int ABT_preemption_timer_stop(ABT_preemption_group group)
+             ABTI_CHECK_ERROR(abt_errno);
+         } else {
+             while (!ABTD_atomic_load_int32(&p_ptimer->sleep_flag)) {
+-                sched_yield();
++                real_sched_yield();
+             }
+             ABTD_atomic_store_uint32(&p_ptimer->stop_flag, 1);
+             abt_errno = ABTD_futex_wakeup(&p_ptimer->sleep_flag);
+@@ -510,7 +511,7 @@ int ABT_preemption_timer_delete(ABT_preemption_group group)
+             ABTI_xstream *p_xstream = p_group->p_xstreams[i];
+             ABTI_preemption_timer *p_ptimer = p_xstream->p_preemption_timer;
+             while (!ABTD_atomic_load_int32(&p_ptimer->sleep_flag)) {
+-                sched_yield();
++                real_sched_yield();
+             }
+             ABTD_atomic_store_uint32(&p_ptimer->terminate_flag, 1);
+             abt_errno = ABTD_futex_wakeup(&p_ptimer->sleep_flag);
+diff --git a/argobots/src/sub_stream.c b/argobots/src/sub_stream.c
+index 0fd94f1..3591257 100644
+--- a/argobots/src/sub_stream.c
++++ b/argobots/src/sub_stream.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "abti.h"
++#include "real_pthread.h"
+ 
+ ABTD_XSTREAM_LOCAL ABTI_sub_xstream *lp_ABTI_sub_xstream = NULL;
+ 
+@@ -375,7 +376,7 @@ int ABTI_sub_xstream_back_to_main(ABTI_thread *p_this_thread)
+      * allocation of sub ESes here, assuming this function is not called
+      * in scheduler context. */
+     while (!ABTI_sub_xstream_exit_main(p_this_thread)) {
+-        sched_yield();
++        real_sched_yield();
+     };
+ 
+     ABTI_xstream *p_xstream = ABTI_local_get_xstream();
+@@ -387,7 +388,7 @@ int ABTI_sub_xstream_back_to_main(ABTI_thread *p_this_thread)
+     if (p_local != p_main) {
+         /* Wait until the main ES surely sleeps */
+         while (!ABTD_atomic_load_uint32(&p_main->ready)) {
+-            sched_yield();
++            real_sched_yield();
+         }
+         p_main->ready = 0;
+ 
+@@ -458,7 +459,7 @@ int ABTI_sub_xstream_list_local_init(ABTI_sub_xstream_list_local *p_sub_list,
+ 
+         /* Wait until a newly-created sub ES sleeps */
+         while (!ABTD_atomic_load_uint32(&p_sub_xstream->ready)) {
+-            sched_yield();
++            real_sched_yield();
+         }
+ 
+         ABTI_sub_xstream_list_add(p_sub_list, p_sub_xstream);
+@@ -702,7 +703,7 @@ int ABTI_sub_xstream_allocator_init(ABTI_sub_xstream_allocator **pp_allocator)
+ 
+     *pp_allocator = p_allocator;
+ 
+-    /* wrapper of pthread_create */
++    /* wrapper of real_pthread_create */
+     abt_errno = ABTD_xstream_context_create(
+             ABTI_sub_xstream_allocator_fn, (void *)p_allocator,
+             &p_allocator->ctx);
+@@ -722,12 +723,12 @@ int ABTI_sub_xstream_allocator_free(ABTI_sub_xstream_allocator *p_allocator)
+ 
+     /* wait until all sub ESes previously allocated are added to the list */
+     while (p_allocator->create_count > 0) {
+-        sched_yield();
++        real_sched_yield();
+     }
+ 
+     /* wait until the allocator surely sleeps */
+     while (!p_allocator->sleep_flag) {
+-        sched_yield();
++        real_sched_yield();
+     }
+ 
+     ABTD_atomic_store_uint32(&p_allocator->terminate_flag, 1);
+diff --git a/argobots/src/thread_htable.c b/argobots/src/thread_htable.c
+index 28ab72f..b7f7b29 100644
+--- a/argobots/src/thread_htable.c
++++ b/argobots/src/thread_htable.c
+@@ -5,6 +5,7 @@
+ 
+ #include "abti.h"
+ #include "abti_thread_htable.h"
++#include "real_pthread.h"
+ 
+ ABTI_thread_htable *ABTI_thread_htable_create(uint32_t num_rows)
+ {
+@@ -19,7 +20,7 @@ ABTI_thread_htable *ABTI_thread_htable_create(uint32_t num_rows)
+ #elif defined(HAVE_CLH_H)
+     clh_init(&p_htable->mutex);
+ #elif defined(USE_PTHREAD_MUTEX)
+-    int ret = pthread_mutex_init(&p_htable->mutex, NULL);
++    int ret = real_pthread_mutex_init(&p_htable->mutex, NULL);
+     assert(!ret);
+ #else
+     ABTI_spinlock_create(&p_htable->mutex);
+@@ -43,7 +44,7 @@ void ABTI_thread_htable_free(ABTI_thread_htable *p_htable)
+ #elif defined(HAVE_CLH_H)
+     clh_destroy(&p_htable->mutex);
+ #elif defined(USE_PTHREAD_MUTEX)
+-    int ret = pthread_mutex_destroy(&p_htable->mutex);
++    int ret = real_pthread_mutex_destroy(&p_htable->mutex);
+     assert(!ret);
+ #else
+     ABTI_spinlock_free(&p_htable->mutex);
