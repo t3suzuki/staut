@@ -275,6 +275,10 @@ struct disassembly_state {
  * this actually rewrites the code.
  * this is called by the disassembler.
  */
+#if defined(USE_GS)
+static int flag_rewrite_fs = 1;
+#endif
+
 #ifdef NEW_DIS_ASM
 static int do_rewrite(void *data, enum disassembler_style style ATTRIBUTE_UNUSED, const char *fmt, ...)
 #else
@@ -286,6 +290,16 @@ static int do_rewrite(void *data, const char *fmt, ...)
 	va_list arg;
 	va_start(arg, fmt);
 	vsprintf(buf, fmt, arg);
+#if defined(USE_GS)
+	if (flag_rewrite_fs == 1) {
+	  if (strstr(buf, "%fs:") && !strstr(buf, "%fs:0x28")) {
+	    printf("%s\n", buf);
+	    uint8_t *ptr = (uint8_t *)(((uintptr_t) s->code) + s->off);
+	    assert(*ptr == 0x64);
+	    *ptr = 0x65;
+	  }
+	}
+#endif
 	/* replace syscall and sysenter with callq *%rax */
 	if (!strncmp(buf, "syscall", 7) || !strncmp(buf, "sysenter", 8)) {
 		uint8_t *ptr = (uint8_t *)(((uintptr_t) s->code) + s->off);
@@ -343,6 +357,16 @@ static void rewrite_code(void)
 	{
 		char buf[4096];
 		while (fgets(buf, sizeof(buf), fp) != NULL) {
+#if defined(USE_GS)
+		  printf("%s\n", buf);
+		  if (strstr(buf, "libc.so.6") ||
+		      strstr(buf, "libm.so.6") ||
+		      strstr(buf, "ld-linux-x86-64.so.2") ||
+		      strstr(buf, "libabt.so.0"))
+		    flag_rewrite_fs = 0;
+		  else
+		    flag_rewrite_fs = 1;
+#endif
 			/* we do not touch stack and vsyscall memory */
 			if (((strstr(buf, "stack") == NULL) && (strstr(buf, "vsyscall") == NULL))) {
 				int i = 0;
