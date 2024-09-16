@@ -283,82 +283,70 @@ index 29d523d..46aa110 100644
  /**
   * @ingroup COND
 diff --git a/argobots/src/global.c b/argobots/src/global.c
-index 0752c7b..7e0f8ca 100644
+index 0752c7b..9e277d8 100644
 --- a/argobots/src/global.c
 +++ b/argobots/src/global.c
-@@ -4,6 +4,7 @@
-  */
+@@ -12,6 +12,7 @@
  
- #include "abti.h"
-+#include "real_pthread.h"
+ /* Global Data */
+ ABTI_global *gp_ABTI_global = NULL;
++static my_tls_t *my_tls = NULL;
  
- /** @defgroup ENV Init & Finalize
-  * This group is for initialization and finalization of the Argobots
-@@ -37,6 +38,50 @@ static inline void ABTI_init_lock_release() {
+ /* To indicate how many times ABT_init is called. */
+ static uint32_t g_ABTI_num_inits = 0;
+@@ -37,7 +38,6 @@ static inline void ABTI_init_lock_release() {
      ABTD_atomic_clear_uint8(&g_ABTI_init_lock);
  }
  
-+#if defined(ABT_CONFIG_USE_GS)
-+unsigned long
-+read_fsbase() {
-+#if defined(ABT_CONFIG_USE_FSGSBASE)
-+  return _readfsbase_u64();
-+#else
-+  unsigned long fsbase;
-+  arch_prctl(ARCH_GET_FS, &fsbase);
-+  return fsbase;
-+#endif
-+}
-+
-+static void worker_for_gs()
-+{
-+    pthread_attr_t attr;
-+    void *stack_addr;
-+    size_t stack_size;
-+    real_pthread_getattr_np(gp_ABTI_global->pth_for_gs, &attr);
-+    pthread_attr_getstack(&attr, &stack_addr, &stack_size);
-+    size_t tls_size = stack_size - 0x9c0;
-+    void *fsbase_guess = stack_addr + tls_size;
-+    if (fsbase_guess == (void *)read_fsbase())
-+        printf("Good FSBase!\n");
-+    else {
-+        printf("[Error] Wrong FSBase guess %lx %lx\n",fsbase_guess, read_fsbase());
-+        exit(-1);
-+    }
-+    gp_ABTI_global->tls_size = tls_size;
-+    gp_ABTI_global->tls_addr = stack_addr;
-+    
-+    while (1) {
-+        printf("%s %d\n", __func__, __LINE__);
-+        sleep(1000);
-+    }
-+}
-+
-+void ABTI_set_gsbase(ABTD_thread_context *p_newctx)
-+{
-+    size_t tls_size = gp_ABTI_global->tls_size;
-+    void *p = malloc(tls_size);
-+    memcpy(p, gp_ABTI_global->tls_addr, tls_size);
-+    p_newctx->gsbase = (unsigned long *)(p + tls_size);
-+}
-+#endif
- 
+-
  /**
   * @ingroup ENV
-@@ -71,6 +116,11 @@ int ABT_init(int argc, char **argv)
+  * @brief   Initialize the Argobots execution environment.
+@@ -342,3 +342,42 @@ void ABTI_global_update_max_xstreams(int new_size)
+     }
+ }
  
-     gp_ABTI_global = (ABTI_global *)ABTU_malloc(sizeof(ABTI_global));
- 
-+#if defined(ABT_CONFIG_USE_GS)
-+    {
-+        real_pthread_create(&gp_ABTI_global->pth_for_gs, NULL, (void *(*)(void *))worker_for_gs, NULL);
++void ABTI_set_gsbase(ABTD_thread_context *p_newctx)
++{
++    size_t tls_size = my_tls->init_mem_size;
++    void *p;
++    int ret = posix_memalign(&p, 16, tls_size+16);
++    dtv_t *dtv = (dtv_t*)malloc(sizeof(dtv_t)*my_tls->max_used_dtv);
++    int i;
++    for (i=0; i<my_tls->max_used_dtv; i++) {
++        dtv[i].size = my_tls->dtv[i].size;
++        dtv[i].addr = p + (uint64_t)(my_tls->dtv[i].addr - my_tls->org_start);
 +    }
-+#endif
-     /* Initialize the system environment */
-     ABTD_env_init(gp_ABTI_global);
- 
++    assert(ret == 0);
++    memcpy(p, my_tls->init_mem, tls_size);
++    p_newctx->gsbase = (unsigned long *)(p + tls_size);
++    p_newctx->dtv = dtv;
++    *(uint64_t *)p_newctx->gsbase = (uint64_t)p_newctx->gsbase;
++}
++
++void *
++ABT_tls_get_addr(tls_get_addr_t *a)
++{
++    //printf("id=%d offset=%d\n", a->id, a->offset);
++    //dtv_t *dtv = (dtv_t *)(gs_ptr + 1);
++    ABTI_thread *p_thread = ABTI_local_get_thread();
++    dtv_t *dtv = p_thread->ctx.dtv;
++    return dtv[a->id].addr + a->offset;
++}
++
++void ABT_set_tls(my_tls_t *__my_tls)
++{
++    my_tls = __my_tls;
++}
++
++void ABT_debug()
++{
++    ABTI_thread *p_thread = NULL;
++    p_thread = ABTI_local_get_thread();
++    printf("%p current: %p\n", p_thread, p_thread->ctx.gsbase);
++}
 diff --git a/argobots/src/include/abt.h.in b/argobots/src/include/abt.h.in
-index db614cb..0c84225 100644
+index db614cb..f54e703 100644
 --- a/argobots/src/include/abt.h.in
 +++ b/argobots/src/include/abt.h.in
 @@ -114,7 +114,9 @@ extern "C" {
@@ -372,7 +360,38 @@ index db614cb..0c84225 100644
  /* Constants */
  enum ABT_xstream_state {
      ABT_XSTREAM_STATE_CREATED,
-@@ -570,10 +572,13 @@ int ABT_mutex_attr_set_recursive(ABT_mutex_attr attr, ABT_bool recursive) ABT_AP
+@@ -352,9 +354,30 @@ typedef struct {
+     ABT_pool_print_all_fn     p_print_all;
+ } ABT_pool_def;
+ 
++typedef struct {
++  void *addr;
++  size_t size;
++} dtv_t;
++
++typedef struct {
++  dtv_t *dtv;
++  int max_used_dtv;
++  int max_dtv;
++  size_t org_start;
++  void *init_mem;
++  size_t init_mem_size;
++} my_tls_t;
++
++typedef struct {
++  size_t id;
++  size_t offset;
++} tls_get_addr_t;
+ 
+ /* Init & Finalize */
+ int ABT_init(int argc, char **argv) ABT_API_PUBLIC;
++void ABT_set_tls(my_tls_t *my_tls) ABT_API_PUBLIC;
++void *ABT_tls_get_addr(tls_get_addr_t *a) ABT_API_PUBLIC;
++void ABT_debug(void) ABT_API_PUBLIC;
+ int ABT_finalize(void) ABT_API_PUBLIC;
+ int ABT_initialized(void) ABT_API_PUBLIC;
+ 
+@@ -570,10 +593,13 @@ int ABT_mutex_attr_set_recursive(ABT_mutex_attr attr, ABT_bool recursive) ABT_AP
  
  /* Condition variable */
  int ABT_cond_create(ABT_cond *newcond) ABT_API_PUBLIC;
@@ -387,7 +406,7 @@ index db614cb..0c84225 100644
  int ABT_cond_broadcast(ABT_cond cond) ABT_API_PUBLIC;
  
 diff --git a/argobots/src/include/abtd_thread.h b/argobots/src/include/abtd_thread.h
-index 4bb52df..e79534d 100644
+index 4bb52df..bad7c54 100644
 --- a/argobots/src/include/abtd_thread.h
 +++ b/argobots/src/include/abtd_thread.h
 @@ -1,3 +1,6 @@
@@ -427,7 +446,7 @@ index 4bb52df..e79534d 100644
      return abt_errno;
  
  #else
-@@ -181,13 +188,25 @@ int ABTD_thread_context_arm_thread(size_t stacksize, void *p_stack,
+@@ -181,13 +188,26 @@ int ABTD_thread_context_arm_thread(size_t stacksize, void *p_stack,
  /* Currently, nothing to do */
  #define ABTD_thread_context_free(p_ctx)
  
@@ -447,7 +466,8 @@ index 4bb52df..e79534d 100644
  {
  #if defined(ABT_CONFIG_USE_FCONTEXT)
 +#if defined(ABT_CONFIG_USE_GS)
-+    write_gsbase(p_new->gsbase);
++  //printf("%p %p\n", p_new, p_new->gsbase);
++  write_gsbase(p_new->gsbase);
 +#endif
      jump_fcontext(&p_old->fctx, p_new->fctx, p_new);
 -
@@ -455,36 +475,35 @@ index 4bb52df..e79534d 100644
      int ret = swapcontext(p_old, p_new);
      ABTI_ASSERT(ret == 0);
 diff --git a/argobots/src/include/abtd_ucontext.h b/argobots/src/include/abtd_ucontext.h
-index faee467..7a34c54 100644
+index faee467..60865d4 100644
 --- a/argobots/src/include/abtd_ucontext.h
 +++ b/argobots/src/include/abtd_ucontext.h
-@@ -16,6 +16,9 @@ typedef struct abt_ucontext_t {
+@@ -16,6 +16,10 @@ typedef struct abt_ucontext_t {
      void (*f_thread)(void *);       /* ULT function */
      void *                 p_arg;   /* ULT function argument */
      struct abt_ucontext_t *p_link;  /* pointer to scheduler context */
 +#if defined(ABT_CONFIG_USE_GS)
 +    unsigned long *gsbase;
++    dtv_t *dtv;
 +#endif
  } abt_ucontext_t;
  
  #else
 diff --git a/argobots/src/include/abti.h b/argobots/src/include/abti.h
-index a1d3d02..fb4e439 100644
+index a1d3d02..7171c47 100644
 --- a/argobots/src/include/abti.h
 +++ b/argobots/src/include/abti.h
-@@ -262,6 +262,11 @@ struct ABTI_global {
+@@ -262,6 +262,9 @@ struct ABTI_global {
  #endif
  
      ABT_bool print_config;      /* Whether to print config on ABT_init */
 +#if defined(ABT_CONFIG_USE_GS)
-+    pthread_t pth_for_gs;
-+    size_t tls_size;
-+    void *tls_addr;
++    my_tls_t *my_tls;
 +#endif
  };
  
  struct ABTI_local {
-@@ -524,6 +529,7 @@ struct ABTI_ktable {
+@@ -524,6 +527,7 @@ struct ABTI_ktable {
  
  struct ABTI_cond {
      ABTI_spinlock lock;
