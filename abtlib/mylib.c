@@ -533,11 +533,28 @@ int sched_yield(void) {
 }
 #endif
 
+static my_tls_t my_tls;
+
+#if 0
+void *
+__tls_get_addr(size_t tls_ia64_m, size_t tls_ia64_offset)
+{
+  return real_tls_get_addr(tls_ia64_m, tls_ia64_offset);
+}
+#else
+int piyo = 666;
+void *
+__tls_get_addr2(tls_get_addr_t *a)
+{
+  return &piyo;
+}
+#endif
 
 void
 abt_init()
 {
   int i;
+  ABT_set_tls(&my_tls);
   ABT_init(0, NULL);
   ABT_xstream_self(&abt_xstreams[0]);
   ABT_thread abt_thread;
@@ -563,7 +580,7 @@ abt_init()
 
 
 void __zpoline_init(void);
-
+void my_dl(my_tls_t *);
 
 int mylib_initialized = 0;
 
@@ -576,6 +593,8 @@ mylib_init()
     printf("Using %d cores.\n", N_CORE);
     
     mylib_initialized = 1;
+
+    my_dl(&my_tls);
     
     __zpoline_init();
     
@@ -584,7 +603,11 @@ mylib_init()
   }
 }
 
-
+void
+my_test_func()
+{
+  ABT_debug();
+}
 
 
 } // extern "C"

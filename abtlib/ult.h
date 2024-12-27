@@ -42,7 +42,10 @@ static inline uint64_t ult_id()
 {
   uint64_t abt_id;
   int ret = ABT_thread_self_id(&abt_id);
-  return abt_id;
+  if (ret != ABT_SUCCESS)
+    return 0xdeadcafe;
+  else
+    return abt_id;
 }
 
 static inline int ult_core_id()

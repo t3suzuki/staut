@@ -33,6 +33,7 @@
 #include <dlfcn.h>
 
 //#define NEW_DIS_ASM (1)
+#define USE_GS (1)
 
 #define SUPPLEMENTAL__REWRITTEN_ADDR_CHECK 1
 
@@ -358,14 +359,15 @@ static void rewrite_code(void)
 		char buf[4096];
 		while (fgets(buf, sizeof(buf), fp) != NULL) {
 #if defined(USE_GS)
-		  printf("%s\n", buf);
 		  if (strstr(buf, "libc.so.6") ||
 		      strstr(buf, "libm.so.6") ||
 		      strstr(buf, "ld-linux-x86-64.so.2") ||
-		      strstr(buf, "libabt.so.0"))
+		      strstr(buf, "libabt.so.0")) {
 		    flag_rewrite_fs = 0;
-		  else
+		  } else {
+		    printf("%s\n", buf);
 		    flag_rewrite_fs = 1;
+		  }
 #endif
 			/* we do not touch stack and vsyscall memory */
 			if (((strstr(buf, "stack") == NULL) && (strstr(buf, "vsyscall") == NULL))) {

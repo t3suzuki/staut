@@ -13,5 +13,5 @@ ABT_PATH ?= /home/tomoya-s/mountpoint/tomoya-s/staut/abtlib/ppopp21-preemption-a
 
 all:
 	g++ $(FLAGS) -c mylib.c  -fno-exceptions -I $(ABT_PATH)/include -fpermissive
-	gcc $(FLAGS) -shared -o mylib.so mylib.o hook.c zpoline.c load_debug.c -I $(ABT_PATH)/include -L $(ABT_PATH)/lib -labt -lopcodes -lstdc++
+	gcc $(FLAGS) -shared -o mylib.so mylib.o hook.c zpoline.c load_debug.c dl.c -I $(ABT_PATH)/include -L $(ABT_PATH)/lib -labt -lopcodes -lstdc++
 	gcc $(FLAGS) -shared -o debug.so debug.c

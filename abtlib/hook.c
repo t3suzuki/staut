@@ -36,7 +36,7 @@ long hook_function(long a1, long a2, long a3,
 		   long a7)
 {
   if (debug_print) {
-    debug_print(1, a1, 9999);
+    debug_print(1, a1, ult_id());
   }
   if (is_ult()) {
     switch (a1) {
